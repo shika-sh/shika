@@ -1,0 +1,8 @@
+name: Java
+types:
+  Boolean:
+  - boolean
+  String:
+  - text
+  Int:
+  - integer

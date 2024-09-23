@@ -1,0 +1,21 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+db.workspace = true
+renderer.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+clap = { version = "4.5.17", features = ["derive"] }
+dotenvy = { version = "0.15.7" }
+toml = { version = "0.8.19" }
+colored = "2.1.0"
+indicatif = "0.17.8"
+
+[[bin]]
+name = "shika"
+path = "src/main.rs"

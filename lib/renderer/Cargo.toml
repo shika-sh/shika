@@ -1,0 +1,9 @@
+[package]
+name = "renderer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+db.workspace = true
+anyhow.workspace = true
+tera = { version = "1.20.0", features = ["builtins"] }

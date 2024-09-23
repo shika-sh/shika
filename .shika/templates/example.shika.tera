@@ -1,0 +1,8 @@
+Tables:
+
+{%- for table in database.tables %}
+{{ table.name }}:
+    {%- for column in table.columns %}
+    {{ column.name }}: {{ column.type }}
+    {%- endfor %}
+{%- endfor %}

@@ -1,0 +1,17 @@
+database:
+  type: postgres
+  env_key: null
+templates:
+
+- name: My Example Template
+  input: example
+  output_dir: generated
+  output: example.rs
+  single: true
+  language: rust
+
+- name: My Java Example
+  input: java
+  output_dir: generated
+  output: java.java
+  language: java

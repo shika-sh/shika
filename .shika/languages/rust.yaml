@@ -1,0 +1,8 @@
+name: Rust
+types:
+  bool:
+  - boolean
+  String:
+  - text
+  i32:
+  - integer
