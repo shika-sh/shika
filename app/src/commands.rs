@@ -174,36 +174,39 @@ pub fn generate(should_pull: bool) -> anyhow::Result<()> {
 
         if template.single {
             let content = renderer::render(&template.input, &tera, &database, None)?;
-            println!(
-                "{} Successfully rendered \"{}\" (target: {})",
-                "✓".purple(),
-                &template.name,
-                &language.name.blue()
-            );
 
             let target_path = format!("{}/{}", template.output_dir, template.output);
-            File::create(target_path)?.write_all(content.as_bytes())?;
+            File::create(&target_path)?.write_all(content.as_bytes())?;
             count += 1;
+
+            println!(
+                "{} Successfully rendered \"{}\" to \"{}\" (target: {})",
+                "✓".purple(),
+                &template.name,
+                &target_path,
+                &language.name.blue()
+            );
         } else {
             let mut tables_iter = database.tables.iter();
             while let Some(table) = tables_iter.next() {
                 let content = renderer::render(&template.input, &tera, &database, Some(table))?;
-                println!(
-                    "{} Successfully rendered \"{}\" for \"{}\" (target: {})",
-                    "✓".purple(),
-                    &template.name,
-                    &table.name,
-                    &language.name.blue()
-                );
 
                 let target_path = format!(
                     "{}/{}",
                     template.output_dir,
                     template.output.replace("{table}", &table.name)
                 );
-
-                File::create(target_path)?.write_all(content.as_bytes())?;
+                File::create(&target_path)?.write_all(content.as_bytes())?;
                 count += 1;
+
+                println!(
+                    "{} Successfully rendered \"{}\" for \"{}\" to \"{}\" (target: {})",
+                    "✓".purple(),
+                    &template.name,
+                    &table.name,
+                    &target_path,
+                    &language.name.blue()
+                );
             }
         }
     }

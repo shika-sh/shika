@@ -9,6 +9,6 @@ pub fn exclude_keys(value: &Value, _args: &HashMap<String, Value>) -> Result<Val
         .ok_or(Error::msg(Value::String("Error".to_string())))?
         .clone()
         .into_iter()
-        .filter(|item| item["constraint_type"] != "PRIMARY KEY")
+        .filter(|item| !item["is_primary_key"].as_bool().unwrap_or(false))
         .collect())
 }
