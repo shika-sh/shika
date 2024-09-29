@@ -18,10 +18,7 @@ pub fn get() -> anyhow::Result<Config> {
     Ok(Config {
         database: DatabaseConfig {
             kind: config.database.kind,
-            env_key: config
-                .database
-                .env_key
-                .unwrap_or(String::from("DATABASE_URL")),
+            exclude_tables: config.database.exclude_tables.unwrap_or(Vec::new()),
         },
         templates: config.templates,
     })
@@ -37,7 +34,7 @@ pub struct Config {
 pub struct DatabaseConfig {
     #[serde(rename = "type")]
     pub kind: DatabaseKind,
-    pub env_key: String,
+    pub exclude_tables: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -61,5 +58,5 @@ pub struct DeserializedConfig {
 pub struct DeserializedDatabaseConfig {
     #[serde(rename = "type")]
     pub kind: DatabaseKind,
-    pub env_key: Option<String>,
+    pub exclude_tables: Option<Vec<String>>,
 }

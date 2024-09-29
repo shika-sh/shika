@@ -1,7 +1,7 @@
 use crate::{config, language};
 use anyhow::{anyhow, Error};
 use colored::Colorize;
-use db::{ColumnInformation, DatabaseInformation, DatabaseKind, TableInformation};
+use db::{Column, Database, DatabaseKind, Table};
 use dotenvy::dotenv;
 use indicatif::ProgressStyle;
 use std::{
@@ -48,7 +48,7 @@ pub fn init() -> anyhow::Result<()> {
         let config = config::DeserializedConfig {
             database: config::DeserializedDatabaseConfig {
                 kind: DatabaseKind::Postgres,
-                env_key: None,
+                exclude_tables: None,
             },
             templates: vec![config::TemplateConfig {
                 name: String::from("My Example Template"),
@@ -90,9 +90,9 @@ pub fn init() -> anyhow::Result<()> {
 pub fn pull() -> anyhow::Result<()> {
     dotenv().ok();
     let config: config::Config = config::get()?;
-    let db_url = env::var(&config.database.env_key)?;
+    let db_url = env::var("DATABASE_URL")?;
 
-    let database: db::DatabaseInformation = Runtime::new()
+    let database: Database = Runtime::new()
         .unwrap()
         .block_on(async {
             let spinner =
@@ -104,15 +104,15 @@ pub fn pull() -> anyhow::Result<()> {
                 DatabaseKind::Postgres => {
                     println!("{} Using PostgreSQL", "✓".purple());
                     spinner.enable_steady_tick(Duration::from_millis(120));
-                    let _ = db::postgres::get(&db::postgres::connect(&db_url).await?).await;
-                    db::postgres::get(&db::postgres::connect(&db_url).await?).await
+
+                    let excluded = config.database.exclude_tables;
+                    db::postgres::get(&db::postgres::connect(&db_url).await?, excluded).await
                 }
                 DatabaseKind::MySql => {
                     println!("{} Using MySQL", "✓".purple());
                     spinner.enable_steady_tick(Duration::from_millis(120));
                     db::mysql::get(&db::mysql::connect(&db_url).await?).await
                 }
-                DatabaseKind::Maria => todo!(),
                 DatabaseKind::SqLite => todo!(),
             }?;
 
@@ -140,7 +140,7 @@ pub fn generate(should_pull: bool) -> anyhow::Result<()> {
 
     let config: config::Config = config::get()?;
     let file = File::open(".shika/database.yaml")?;
-    let database: DatabaseInformation = serde_yaml::from_reader(file)?;
+    let database: Database = serde_yaml::from_reader(file)?;
 
     let mut templates_iter = config.templates.iter();
     let tera = renderer::create()?;
@@ -153,12 +153,12 @@ pub fn generate(should_pull: bool) -> anyhow::Result<()> {
         database.tables = database
             .tables
             .iter()
-            .map(|table| TableInformation {
+            .map(|table| Table {
                 name: table.name.clone(),
                 columns: table
                     .columns
                     .iter()
-                    .map(|column| ColumnInformation {
+                    .map(|column| Column {
                         kind: language
                             .types
                             .iter()

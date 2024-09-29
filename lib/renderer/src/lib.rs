@@ -3,14 +3,13 @@ mod model;
 
 pub use model::{Column, Database, Table};
 
-use db::{DatabaseInformation, TableInformation};
 use tera::{Context, Tera};
 
 pub fn render(
     path: &str,
     tera: &Tera,
-    database: &DatabaseInformation,
-    table: Option<&TableInformation>,
+    database: &db::Database,
+    table: Option<&db::Table>,
 ) -> anyhow::Result<String> {
     let mut context = Context::new();
     context.insert("database", &database);

@@ -1,6 +1,7 @@
 database:
   type: postgres
-  env_key: null
+  exclude_tables:
+    - _sqlx_migrations
 templates:
 
 - name: My Example Template

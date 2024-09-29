@@ -1,6 +1,6 @@
 use sqlx::{MySql, Pool};
 
-use crate::DatabaseInformation;
+use crate::Database;
 
 pub async fn connect(url: &str) -> anyhow::Result<Pool<MySql>> {
     let pool = Pool::<MySql>::connect(url).await?;
@@ -8,6 +8,6 @@ pub async fn connect(url: &str) -> anyhow::Result<Pool<MySql>> {
     Ok(pool)
 }
 
-pub async fn get(_pool: &Pool<MySql>) -> anyhow::Result<DatabaseInformation> {
+pub async fn get(_pool: &Pool<MySql>) -> anyhow::Result<Database> {
     todo!()
 }

@@ -9,33 +9,36 @@ pub enum DatabaseKind {
     Postgres,
     #[serde(rename = "mysql")]
     MySql,
-    #[serde(rename = "maria")]
-    Maria,
     #[serde(rename = "sqlite")]
     SqLite,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct DatabaseInformation {
-    #[serde(rename = "name")]
-    pub name: String,
+pub struct Database {
     #[serde(rename = "type")]
     pub kind: DatabaseKind,
-    pub tables: Vec<TableInformation>,
+    pub tables: Vec<Table>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct TableInformation {
+pub struct Table {
     pub name: String,
-    pub columns: Vec<ColumnInformation>,
+    pub columns: Vec<Column>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct ColumnInformation {
+pub struct Column {
     pub name: String,
     #[serde(rename = "type")]
     pub kind: String,
-    pub optional: bool,
     pub is_primary_key: bool,
-    pub is_foreign_key: bool,
+    pub optional: bool,
+    pub referenced_by: Vec<Reference>,
+    pub references: Option<Reference>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Reference {
+    table: String,
+    column: String,
 }

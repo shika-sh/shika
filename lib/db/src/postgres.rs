@@ -1,8 +1,8 @@
-use anyhow::{anyhow, Ok};
-use itertools::Itertools;
-use sqlx::{query_as, Pool, Postgres};
+use anyhow::anyhow;
+use futures::TryStreamExt;
+use sqlx::{query_as, FromRow, Pool, Postgres};
 
-use crate::{ColumnInformation, DatabaseInformation, DatabaseKind, TableInformation};
+use crate::{Column, Database, DatabaseKind, Reference, Table};
 
 pub async fn connect(url: &str) -> anyhow::Result<Pool<Postgres>> {
     Pool::<Postgres>::connect(url)
@@ -10,67 +10,142 @@ pub async fn connect(url: &str) -> anyhow::Result<Pool<Postgres>> {
         .map_err(|error| anyhow!(error))
 }
 
-#[derive(sqlx::FromRow, Debug)]
-struct RawColumnInformation {
-    table_name: String,
-    column_name: String,
-    data_type: String,
-    is_nullable: String,
-    constraint_type: Option<String>,
+#[derive(FromRow, Debug)]
+struct TableQuery {
+    pub name: String,
 }
 
-pub async fn get(pool: &Pool<Postgres>) -> anyhow::Result<DatabaseInformation> {
-    let columns = query_as::<_, RawColumnInformation>(
+#[derive(FromRow, Debug)]
+struct ColumnQuery {
+    name: String,
+    kind: String,
+    is_primary_key: bool,
+    optional: bool,
+}
+
+#[derive(FromRow, Debug)]
+struct ColumnReferenceQuery {
+    column: String,
+    table: String,
+}
+
+pub async fn get(pool: &Pool<Postgres>, ignore: Vec<String>) -> anyhow::Result<Database> {
+    let mut tables_stream = query_as::<_, TableQuery>(
         r#"
         SELECT
-            T.table_name,
-            T.column_name,
-            T.data_type,
-            T.is_nullable,
-            C.constraint_type
-        FROM information_schema.columns AS T
-        LEFT JOIN information_schema.key_column_usage AS K
-            ON T.column_name = K.column_name
-                AND T.table_name = K.table_name
-        LEFT JOIN information_schema.table_constraints AS C
-            ON C.table_name = K.table_name
-                AND C.constraint_catalog = K.constraint_catalog
-                AND C.constraint_schema = K.constraint_schema
-                AND C.constraint_name = K.constraint_name
+            "table_name" AS "name"
+        FROM "information_schema"."tables"
         WHERE
-            T.table_schema = $1
-            AND T.table_name NOT LIKE '\_%'
-        ORDER BY T.table_name, T.ordinal_position
+            "table_type" = 'BASE TABLE'
+            AND "table_schema" = $1
+            AND NOT ("table_name" = ANY($2))
         "#,
     )
     .bind("public")
-    .fetch_all(pool)
-    .await?;
+    .bind(ignore)
+    .fetch(pool);
 
-    let mut tables: Vec<TableInformation> = vec![];
-    for (key, column_chunks) in &columns.iter().chunk_by(|column| &column.table_name) {
-        tables.push(TableInformation {
-            name: key.clone(),
-            columns: column_chunks
-                .map(|column| ColumnInformation {
-                    name: column.column_name.clone(),
-                    kind: column.data_type.clone(),
-                    optional: column.is_nullable == "YES",
-                    is_primary_key: column
-                        .constraint_type
-                        .clone()
-                        .is_some_and(|val| val == "PRIMARY KEY"),
-                    is_foreign_key: column
-                        .constraint_type
-                        .clone()
-                        .is_some_and(|val| val == "FOREIGN KEY"),
-                })
-                .collect(),
+    let mut tables: Vec<Table> = Vec::new();
+    while let Some(table) = tables_stream.try_next().await? {
+        let mut columns_stream = query_as::<_, ColumnQuery>(
+            r#"
+            SELECT
+                C."column_name" AS "name",
+                C."data_type" AS "kind",
+                CASE
+                    WHEN C."is_nullable" = 'YES' THEN TRUE
+                ELSE
+                    FALSE
+                END AS "optional",
+                CASE
+                    WHEN TC."constraint_type" = 'PRIMARY KEY' THEN TRUE
+                ELSE
+                    FALSE
+                END AS "is_primary_key",
+                TC.*
+            FROM "information_schema"."columns" AS C
+            LEFT JOIN "information_schema"."key_column_usage" AS KCU
+                ON C."column_name" = KCU."column_name"
+                AND C."table_name" = KCU."table_name"
+            LEFT JOIN "information_schema"."table_constraints" AS TC
+                ON TC.table_name = KCU.table_name
+                AND TC.constraint_catalog = KCU.constraint_catalog
+                AND TC.constraint_schema = KCU.constraint_schema
+                AND TC.constraint_name = KCU.constraint_name
+            WHERE
+                (TC."constraint_type" IS NULL OR TC."constraint_type" != 'FOREIGN KEY')
+                AND C."table_name" = $1
+            "#,
+        )
+        .bind(&table.name)
+        .fetch(pool);
+
+        let mut columns: Vec<Column> = Vec::new();
+        while let Some(column) = columns_stream.try_next().await? {
+            // Query for all columns referencing this column.
+            let referenced_by = query_as::<_, ColumnReferenceQuery>(
+                r#"
+                SELECT
+                    REFBY."column_name" AS "column",
+                    REFBY."table_name" AS "table"
+                FROM "information_schema"."referential_constraints" AS RC
+                INNER JOIN "information_schema"."key_column_usage" AS REFBY
+                    ON RC."constraint_name" = REFBY."constraint_name"
+                INNER JOIN "information_schema"."key_column_usage" AS REFTO
+                    ON RC."unique_constraint_name" = REFTO."constraint_name"
+                WHERE REFTO."column_name" = $1 AND REFTO."table_name" = $2
+                "#,
+            )
+            .bind(&column.name)
+            .bind(&table.name)
+            .fetch_all(pool)
+            .await?;
+
+            // Query for all columns referenced by this column.
+            let references = query_as::<_, ColumnReferenceQuery>(
+                r#"
+                SELECT
+                    REFTO."column_name" AS "column",
+                    REFTO."table_name" AS "table"
+                FROM "information_schema"."referential_constraints" AS RC
+                INNER JOIN "information_schema"."key_column_usage" AS REFBY
+                    ON RC."constraint_name" = REFBY."constraint_name"
+                INNER JOIN "information_schema"."key_column_usage" AS REFTO
+                    ON RC."unique_constraint_name" = REFTO."constraint_name"
+                WHERE REFBY."column_name" = $1 AND REFBY."table_name" = $2
+                "#,
+            )
+            .bind(&column.name)
+            .bind(&table.name)
+            .fetch_optional(pool)
+            .await?;
+
+            columns.push(Column {
+                name: column.name,
+                kind: column.kind,
+                is_primary_key: column.is_primary_key,
+                optional: column.optional,
+                referenced_by: referenced_by
+                    .into_iter()
+                    .map(|r| Reference {
+                        table: r.table,
+                        column: r.column,
+                    })
+                    .collect(),
+                references: references.map(|r| Reference {
+                    table: r.table,
+                    column: r.column,
+                }),
+            });
+        }
+
+        tables.push(Table {
+            name: table.name.clone(),
+            columns,
         });
     }
 
-    Ok(DatabaseInformation {
-        name: "public".to_string(),
+    Ok(Database {
         kind: DatabaseKind::Postgres,
         tables,
     })
