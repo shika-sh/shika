@@ -2,14 +2,14 @@
 resolver = "2"
 members = [
     "app",
-    "lib/*"
+    "libs/*"
 ]
 default-members = ["app"]
 
 [workspace.dependencies]
 anyhow = "1.0.89"
-db = { path = "lib/db" }
-renderer = { path = "lib/renderer" }
+db = { path = "libs/db" }
+renderer = { path = "libs/renderer" }
 tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread"] }
 serde = { version = "1.0.210", features = ["derive"] }
 serde_yaml = { version = "0.9.33" }
